@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head><title>ELAPOS - Ingia</title></head>
+<body style="font-family: Arial; background-color: #f4f6f9; padding: 50px; text-align: center;">
+    <div style="max-width: 350px; margin: 0 auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
+        <h2>Ingia Dukani</h2>
+        {% if error %}
+            <p style="color: red; font-size: 14px;">{{ error }}</p>
+        {% endif %}
+        <form method="POST">
+            <input type="text" name="username" placeholder="Username" required style="width: 90%; padding: 10px; margin: 10px 0;"><br>
+            <input type="password" name="password" placeholder="Nenosiri" required style="width: 90%; padding: 10px; margin: 10px 0;"><br>
+            <button type="submit" style="width: 95%; background: #28a745; color: white; padding: 10px; border: none; border-radius: 4px; font-weight: bold;">Ingia</button>
+        </form>
+        <br>
+        <a href="/register" style="font-size: 13px;">Hauna akaunti? Sajili hapa</a> | <a href="/" style="font-size: 13px;">Nyumbani</a>
+    </div>
+</body>
+</html>

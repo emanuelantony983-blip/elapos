@@ -1,0 +1,349 @@
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+import sqlite3
+import os
+from datetime import datetime
+
+app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'elapos_secret_key_2026')
+
+def init_db():
+    conn = sqlite3.connect('elapos.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shop_name TEXT NOT NULL,
+            username TEXT UNIQUE NOT NULL,
+            phone TEXT NOT NULL,
+            password TEXT NOT NULL,
+            status TEXT DEFAULT 'pending'
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            name TEXT NOT NULL,
+            buying_price REAL NOT NULL,
+            selling_price REAL NOT NULL,
+            quantity REAL NOT NULL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sales (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            product_name TEXT NOT NULL,
+            quantity_sold REAL NOT NULL,
+            buying_total REAL NOT NULL,
+            selling_total REAL NOT NULL,
+            profit REAL NOT NULL,
+            sale_date TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+@app.before_request
+def check_pending_status():
+    if 'user_id' in session:
+        if request.endpoint in ['admin_panel', 'approve_user', 'logout', 'pending_payment', 'static']:
+            return
+        
+        conn = sqlite3.connect('elapos.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, username FROM users WHERE id = ?", (session['user_id'],))
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user:
+            status = user[0]
+            username = user[1]
+            if status == 'pending' and username != 'admin':
+                return redirect(url_for('pending_payment'))
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        shop_name = request.form['shop_name']
+        username = request.form['username']
+        phone = request.form['phone']
+        password = request.form['password']
+        
+        try:
+            conn = sqlite3.connect('elapos.db')
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO users (shop_name, username, phone, password, status) VALUES (?, ?, ?, ?, 'pending')",
+                           (shop_name, username, phone, password))
+            conn.commit()
+            user_id = cursor.lastrowid
+            conn.close()
+            
+            session['user_id'] = user_id
+            session['username'] = username
+            return redirect(url_for('pending_payment'))
+        except sqlite3.IntegrityError:
+            flash('Jina hili la mtumiaji tayari limeshachukuliwa!')
+            
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        
+        conn = sqlite3.connect('elapos.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, password, status FROM users WHERE username = ?", (username,))
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user and user[2] == password:
+            session['user_id'] = user[0]
+            session['username'] = user[1]
+            if user[3] == 'pending' and user[1] != 'admin':
+                return redirect(url_for('pending_payment'))
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Taarifa si sahihi!')
+            
+    return render_template('login.html')
+
+@app.route('/pending')
+def pending_payment():
+    payment_number = "Airtel Money - 0680778594"
+    whatsapp_url = "https://wa.me/255680778594?text=Habari%20Admin,%20nimefanya%20malipo%20ya%20ELAPOS,%20naomba%20kuidhinishiwa%20akaunti%20yangu."
+    return render_template('pending_payment.html', payment_number=payment_number, whatsapp_url=whatsapp_url)
+
+@app.route('/admin')
+def admin_panel():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    conn = sqlite3.connect('elapos.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, shop_name, username, phone, status FROM users")
+    users = cursor.fetchall()
+    conn.close()
+    
+    rows = ""
+    for u in users:
+        status_color = "green" if u[4] == 'active' else "orange"
+        action_btn = f"<a href='/admin/approve/{u[0]}' style='background:green; color:white; padding:5px 10px; text-decoration:none; border-radius:4px;'>Idhinisha</a>" if u[4] == 'pending' else "Tayari"
+        rows += f"<tr><td>{u[0]}</td><td>{u[1]}</td><td>{u[2]}</td><td>{u[3]}</td><td style='color:{status_color}; font-weight:bold;'>{u[4]}</td><td>{action_btn}</td></tr>"
+        
+    return f"""
+    <html>
+    <head><title>ELAPOS - Admin Panel</title></head>
+    <body style="font-family:Arial; padding:20px; background:#f4f4f9;">
+        <h2>Usimamizi wa ELAPOS (Admin Panel)</h2>
+        <p><a href="/dashboard">Nenda Dashboard</a> | <a href="/logout">Logout</a></p>
+        <table border="1" cellpadding="10" cellspacing="0" style="background:white; width:100%; border-collapse:collapse;">
+            <tr style="background:#ddd;"><th>ID</th><th>Duka</th><th>Username</th><th>Simu</th><th>Status</th><th>Vitendo</th></tr>
+            {rows}
+        </table>
+    </body>
+    </html>
+    """
+
+@app.route('/admin/approve/<int:user_id>')
+def approve_user(user_id):
+    conn = sqlite3.connect('elapos.db')
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET status = 'active' WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_panel'))
+
+@app.route('/dashboard', methods=['GET', 'POST'])
+def dashboard():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    user_id = session['user_id']
+    conn = sqlite3.connect('elapos.db')
+    cursor = conn.cursor()
+    
+    if request.method == 'POST' and 'add_product' in request.form:
+        name = request.form['name']
+        buying_price = float(request.form['buying_price'])
+        selling_price = float(request.form['selling_price'])
+        quantity = float(request.form['quantity'])
+        
+        cursor.execute("INSERT INTO products (user_id, name, buying_price, selling_price, quantity) VALUES (?, ?, ?, ?, ?)",
+                       (user_id, name, buying_price, selling_price, quantity))
+        conn.commit()
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST' and 'sell_product' in request.form:
+        prod_id = int(request.form['prod_id'])
+        qty_sold = float(request.form['qty_sold'])
+        custom_selling_price = request.form['custom_selling_price']
+        
+        cursor.execute("SELECT name, buying_price, selling_price, quantity FROM products WHERE id = ? AND user_id = ?", (prod_id, user_id))
+        prod = cursor.fetchone()
+        
+        if prod and prod[3] >= qty_sold:
+            p_name = prod[0]
+            b_price = prod[1]
+            
+            if custom_selling_price and custom_selling_price.strip() != "":
+                s_price = float(custom_selling_price)
+            else:
+                s_price = prod[2]
+                
+            new_qty = prod[3] - qty_sold
+            buying_total = b_price * qty_sold
+            selling_total = s_price * qty_sold
+            profit = selling_total - buying_total
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+            
+            cursor.execute("UPDATE products SET quantity = ? WHERE id = ?", (new_qty, prod_id))
+            cursor.execute("INSERT INTO sales (user_id, product_name, quantity_sold, buying_total, selling_total, profit, sale_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                           (user_id, p_name, qty_sold, buying_total, selling_total, profit, current_time))
+            conn.commit()
+        
+        return redirect(url_for('dashboard'))
+
+    cursor.execute("SELECT id, name, buying_price, selling_price, quantity FROM products WHERE user_id = ?", (user_id,))
+    products = cursor.fetchall()
+    
+    cursor.execute("SELECT product_name, quantity_sold, selling_total, profit, sale_date FROM sales WHERE user_id = ? ORDER BY id DESC", (user_id,))
+    sales = cursor.fetchall()
+    
+    cursor.execute("SELECT SUM(profit), SUM(selling_total) FROM sales WHERE user_id = ?", (user_id,))
+    totals = cursor.fetchone()
+    total_profit = totals[0] if totals[0] is not None else 0.0
+    total_sales = totals[1] if totals[1] is not None else 0.0
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    cursor.execute("SELECT SUM(profit), SUM(selling_total) FROM sales WHERE user_id = ? AND sale_date LIKE ?", (user_id, f"{today_str}%"))
+    today_totals = cursor.fetchone()
+    today_profit = today_totals[0] if today_totals[0] is not None else 0.0
+    today_sales = today_totals[1] if today_totals[1] is not None else 0.0
+
+    month_str = datetime.now().strftime("%Y-%m")
+    cursor.execute("SELECT SUM(profit), SUM(selling_total) FROM sales WHERE user_id = ? AND sale_date LIKE ?", (user_id, f"{month_str}%"))
+    month_totals = cursor.fetchone()
+    month_profit = month_totals[0] if month_totals[0] is not None else 0.0
+    month_sales = month_totals[1] if month_totals[1] is not None else 0.0
+
+    conn.close()
+    
+    prod_options = "".join([f"<option value='{p[0]}'>{p[1]} (Zilizopo: {p[4]}, Bei: {p[3]}/=)</option>" for p in products])
+    
+    prod_rows = ""
+    for p in products:
+        prod_rows += f"<tr><td>{p[1]}</td><td>{p[2]}/=</td><td>{p[3]}/=</td><td>{p[4]}</td><td><a href='/delete_product/{p[0]}' onclick='return confirm(\"Una hakika unataka kufuta bidhaa hii?\");' style='color:red; text-decoration:none; font-weight:bold;'>Futa</a></td></tr>"
+
+    sales_rows = "".join([f"<tr><td>{s[4]}</td><td>{s[0]}</td><td>{s[1]}</td><td>{s[2]}/=</td><td style='color: {'green' if s[3] >= 0 else 'red'}; font-weight:bold;'>{s[3]}/=</td></tr>" for s in sales])
+
+    return f"""
+    <html>
+    <head><title>ELAPOS - Duka Lako</title></head>
+    <body style="font-family:Arial; padding:20px; background:#f4f4f9;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h1>ELAPOS - Mfumo wa Mauzo na Faida</h1>
+            <div>
+                <a href="/admin" style="margin-right:15px; text-decoration:none; font-weight:bold;">Admin Panel</a>
+                <a href="/logout" style="color:red; text-decoration:none; font-weight:bold;">Toka nje (Logout)</a>
+            </div>
+        </div>
+        <hr>
+        
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div style="background:white; padding:20px; border-radius:8px; flex:1; min-width:300px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+                <h3>Weka Bidhaa Mpya Stoku</h3>
+                <form method="POST">
+                    <input type="hidden" name="add_product" value="1">
+                    <p><input type="text" name="name" placeholder="Jina la Bidhaa (Mf: Sukari)" required style="width:100%; padding:8px;"></p>
+                    <p><input type="number" step="any" name="buying_price" placeholder="Bei ya Kununulia (Mtaji)" required style="width:100%; padding:8px;"></p>
+                    <p><input type="number" step="any" name="selling_price" placeholder="Bei ya Kuuzia ya Kawaida" required style="width:100%; padding:8px;"></p>
+                    <p><input type="number" step="any" name="quantity" placeholder="Idadi / Kiasi (Mf: 10.5)" required style="width:100%; padding:8px;"></p>
+                    <button type="submit" style="background:#007bff; color:white; border:none; padding:10px 15px; cursor:pointer; border-radius:4px; font-weight:bold;">Hifadhi Bidhaa</button>
+                </form>
+            </div>
+
+            <div style="background:white; padding:20px; border-radius:8px; flex:1; min-width:300px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+                <h3>Fanya Mauzo (POS)</h3>
+                <form method="POST">
+                    <input type="hidden" name="sell_product" value="1">
+                    <p>
+                        Chagua Bidhaa:<br>
+                        <select name="prod_id" required style="width:100%; padding:8px; margin-top:5px;">
+                            {prod_options}
+                        </select>
+                    </p>
+                    <p><input type="number" step="any" name="qty_sold" placeholder="Idadi inayouzwa (Mf: 1.5)" required style="width:100%; padding:8px;"></p>
+                    <p><input type="number" step="any" name="custom_selling_price" placeholder="Bei maalum ya kuuzia (Hiari -acha wazi kama ni bei ya kawaida)" style="width:100%; padding:8px;"></p>
+                    <button type="submit" style="background:green; color:white; border:none; padding:10px 15px; cursor:pointer; border-radius:4px; font-weight:bold;">Uza Sasa</button>
+                </form>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px;">
+            <div style="background:#e3f2fd; padding:15px; border-radius:8px; flex:1; min-width:250px;">
+                <h3>Mauzo ya Leo</h3>
+                <p style="font-size:16px;">Jumla ya Mauzo: <b>{today_sales}/=</b></p>
+                <p style="font-size:16px;">Faida ya Leo: <b style="color: {'green' if today_profit >= 0 else 'red'};">{today_profit}/=</b></p>
+            </div>
+            <div style="background:#e8f5e9; padding:15px; border-radius:8px; flex:1; min-width:250px;">
+                <h3>Ripoti ya Mwezi Huu</h3>
+                <p style="font-size:16px;">Jumla ya Mauzo: <b>{month_sales}/=</b></p>
+                <p style="font-size:16px;">Faida ya Mwezi: <b style="color: {'green' if month_profit >= 0 else 'red'};">{month_profit}/=</b></p>
+            </div>
+            <div style="background:#fff3e0; padding:15px; border-radius:8px; flex:1; min-width:250px;">
+                <h3>Jumla Kuu (All-Time)</h3>
+                <p style="font-size:16px;">Jumla ya Mauzo: <b>{total_sales}/=</b></p>
+                <p style="font-size:16px;">Jumla ya Faida: <b style="color: {'green' if total_profit >= 0 else 'red'};">{total_profit}/=</b></p>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px;">
+            <div style="background:white; padding:20px; border-radius:8px; flex:1; min-width:300px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+                <h3>Bidhaa Zilizopo Stoku</h3>
+                <table border="1" cellpadding="8" cellspacing="0" style="width:100%; border-collapse:collapse;">
+                    <tr style="background:#eee;"><th>Bidhaa</th><th>Mtaji</th><th>Bei ya Kuuzia</th><th>Zilizobaki</th><th>Kitendo</th></tr>
+                    {prod_rows}
+                </table>
+            </div>
+
+            <div style="background:white; padding:20px; border-radius:8px; flex:1; min-width:300px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+                <h3>Historia ya Mauzo & Faida</h3>
+                <table border="1" cellpadding="8" cellspacing="0" style="width:100%; border-collapse:collapse;">
+                    <tr style="background:#eee;"><th>Tarehe & Saa</th><th>Bidhaa</th><th>Idadi</th><th>Pesa</th><th>Faida / Hasara</th></tr>
+                    {sales_rows}
+                </table>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+@app.route('/delete_product/<int:prod_id>')
+def delete_product(prod_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    user_id = session['user_id']
+    conn = sqlite3.connect('elapos.db')
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM products WHERE id = ? AND user_id = ?", (prod_id, user_id))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('dashboard'))
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+if __name__ == '__main__':
+    init_db()
+    port = int(os.environ.get('PORT', 5001))
+    app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
