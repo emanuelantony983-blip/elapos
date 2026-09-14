@@ -62,7 +62,8 @@ def init_db():
     """)
   conn.commit()
   conn.close()
-
+# Hii inaita kazi hiyo mara programu inapowashwa
+init_db()
 
 @app.before_request
 def check_pending_status():
