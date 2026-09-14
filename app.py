@@ -147,12 +147,12 @@ def login():
         user = cursor.fetchone()
         conn.close()
 
-        if user:
-      u_id = user["id"] if isinstance(user, dict) else user[0]
-      u_name = user["username"] if isinstance(user, dict) else user[1]
-      u_pass = user["password"] if isinstance(user, dict) else user[2]
-      u_status = user["status"] if isinstance(user, dict) else user[3]
-
+       
+if user:
+            u_id = user["id"] if isinstance(user, dict) else user[0]
+            u_name = user["username"] if isinstance(user, dict) else user[1]
+            u_pass = user["password"] if isinstance(user, dict) else user[2]
+            u_status = user["status"] if isinstance(user, dict) else user[3]
       if u_pass == password:
         session["user_id"] = u_id
         session["username"] = u_name
