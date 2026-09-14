@@ -139,10 +139,8 @@ def login():
     password = request.form["password"]
 
     conn = get_db_connection()
-cursor = conn.cursor(
-    cursor_factory=psycopg2.extras.RealDictCursor
-)    
-    cursor.execute(
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+      cursor.execute(
         "SELECT id, username, password, status FROM users WHERE username = %s",
         (username,),
     )
