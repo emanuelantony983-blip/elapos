@@ -134,20 +134,20 @@ def register():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-  if request.method == "POST":
-    username = request.form["username"]
-    password = request.form["password"]
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
 
-    conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-      cursor.execute(
-        "SELECT id, username, password, status FROM users WHERE username = %s",
-        (username,),
-    )
-    user = cursor.fetchone()
-    conn.close()
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            "SELECT id, username, password, status FROM users WHERE username = %s",
+            (username,),
+        )
+        user = cursor.fetchone()
+        conn.close()
 
-    if user:
+        if user:
       u_id = user["id"] if isinstance(user, dict) else user[0]
       u_name = user["username"] if isinstance(user, dict) else user[1]
       u_pass = user["password"] if isinstance(user, dict) else user[2]
