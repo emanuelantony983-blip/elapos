@@ -526,18 +526,7 @@ def logout():
   session.clear()
   return redirect(url_for("login"))
 
-@app.route('/pending_payment')
-def pending_payment():
-    return '''
-    <div style="text-align: center; margin-top: 50px; font-family: Arial;">
-        <h2 style="color: #333;">Usajili Umekamilika kwa Mafanikio!</h2>
-        <p>Una siku 30 za kujaribu mfumo huu bure.</p>
-        <p>Ili kuendelea kutumia huduma baada ya kipindi cha majaribio, tafadhali lipia kiasi cha <strong>TZS 5,000</strong>.</p>
-        <p>Wasiliana na msimamizi au fanya malipo kupitia namba ya simu ya duka.</p>
-        <br>
-        <a href="/login" style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Nenda kwenye Kurasa ya Kuingia (Login)</a>
-    </div>
-    '''
+
 if __name__ == "__main__":
   init_db()
   port = int(os.environ.get("PORT", 5001))
