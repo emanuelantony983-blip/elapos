@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -99,38 +99,33 @@ def home():
   return render_template("index.html")
 
 
-@app.route("/register", methods=["GET", "POST"])
+@app.route('/register', methods=['GET', 'POST'])
 def register():
-  if request.method == "POST":
-    shop_name = request.form["shop_name"]
-    username = request.form["username"]
-    phone = request.form["phone"]
-    password = request.form["password"]
-
-    try:
-      conn = get_db_connection()
-      cursor = conn.cursor()
-      cursor.execute(
-          "INSERT INTO users (shop_name, username, phone, password, status)"
-          " VALUES (%s, %s, %s, %s, 'pending') RETURNING id",
-          (shop_name, username, phone, password),
-      )
-      user_id = cursor.fetchone()
-      if isinstance(user_id, dict):
-        user_id = user_id["id"]
-      else:
-        user_id = user_id[0]
-      conn.commit()
-      conn.close()
-
-      session["user_id"] = user_id
-      session["username"] = username
-      return redirect(url_for("pending_payment"))
-    except Exception as e:
-      flash("Jina hili la mtumiaji tayari limeshachukuliwa!")
-
-  return render_template("register.html")
-
+    if request.method == 'POST':
+        shop_name = request.form.get('shop_name')
+        username = request.form.get('username')
+        password = request.form.get('password')
+        phone = request.form.get('phone')
+        
+        # Kutengeneza tarehe ya mwisho ya malipo kiotomatiki (siku 30 mbele)
+        current_date = datetime.now()
+        expiry_date = (current_date + timedelta(days=30)).strftime('%Y-%m-%d')
+        
+        # Kuweka taarifa kwenye database ya Supabase
+        data = {
+            "shop_name": shop_name,
+            "username": username,
+            "password": password,
+            "phone": phone,
+            "expiry": expiry_date,  # Inajazwa yenyewe kiotomatiki
+            "status": "pending"     # Inasubiri idhini ya admin
+        }
+        
+        response = supabase.table('users').insert(data).execute()
+        
+        return redirect(url_for('login'))
+        
+    return render_template('register.html')
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
