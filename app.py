@@ -111,17 +111,18 @@ def register():
         current_date = datetime.now()
         expiry_date = (current_date + timedelta(days=30)).strftime('%Y-%m-%d')
         
-        # Kuweka taarifa kwenye database ya Supabase
-        data = {
-            "shop_name": shop_name,
-            "username": username,
-            "password": password,
-            "phone": phone,
-            "expiry": expiry_date,  # Inajazwa yenyewe kiotomatiki
-            "status": "pending"     # Inasubiri idhini ya admin
-        }
+        # Kuunganisha na database na kuingiza taarifa kwa kutumia psycopg2
+        conn = get_db_connection()
+        cursor = conn.cursor()
         
-        response = supabase.table('users').insert(data).execute()
+        cursor.execute(
+            "INSERT INTO users (shop_name, username, password, phone, expiry, status) VALUES (%s, %s, %s, %s, %s, %s)",
+            (shop_name, username, password, phone, expiry_date, 'pending')
+        )
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
         
         return redirect(url_for('login'))
         
