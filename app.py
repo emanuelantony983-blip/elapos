@@ -134,8 +134,9 @@ def login():
 
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
+        # Tumeongeza 'expiry' kwenye SQL query hapa chini
         cursor.execute(
-            "SELECT id, username, password, status FROM users WHERE username = %s",
+            "SELECT id, username, password, status, expiry FROM users WHERE username = %s",
             (username,),
         )
         user = cursor.fetchone()
@@ -146,18 +147,35 @@ def login():
             u_name = user["username"] if isinstance(user, dict) else user[1]
             u_pass = user["password"] if isinstance(user, dict) else user[2]
             u_status = user["status"] if isinstance(user, dict) else user[3]
+            u_expiry = user["expiry"] if isinstance(user, dict) else user[4]
+
             if u_pass == password:
                 session["user_id"] = u_id
                 session["username"] = u_name
-                if u_status == "pending" and u_name != "admin":
+
+                # Admin anapita moja kwa moja bila vizuizi
+                if u_name == "admin":
+                    return redirect(url_for("dashboard"))
+
+                # Angalia kama status ni pending au kama siku 30 zimeisha
+                if u_status == "pending":
                     return redirect(url_for("pending_payment"))
+                
+                # Hapa tunaweza kuongeza ukaguzi wa siku 30 za expiry kama zimepita
+                if u_expiry:
+                    from datetime import datetime
+                    expiry_date = datetime.strptime(str(u_expiry), "%Y-%m-%d")
+                    if datetime.now() > expiry_date:
+                        return redirect(url_for("pending_payment"))
+
                 return redirect(url_for("dashboard"))
-            flash("Taarifa si sahihi!")
+            else:
+                flash("Taarifa si sahihi!")
         else:
             flash("Taarifa si sahihi!")
-            
+
     return render_template("login.html")
-          
+           
 
 @app.route("/pending")
 def pending_payment():
