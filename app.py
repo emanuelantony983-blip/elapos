@@ -122,7 +122,7 @@ def register():
         cursor.close()
         conn.close()
         
-        return redirect(url_for('pending_payment'))
+        return redirect(url_for('login'))
         
     return render_template('register.html')
            
