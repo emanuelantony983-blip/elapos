@@ -107,11 +107,9 @@ def register():
         password = request.form.get('password')
         phone = request.form.get('phone')
         
-        # Kutengeneza tarehe ya mwisho ya malipo kiotomatiki (siku 30 mbele)
         current_date = datetime.now()
         expiry_date = (current_date + timedelta(days=30)).strftime('%Y-%m-%d')
         
-        # Kuunganisha na database na kuingiza taarifa kwa kutumia psycopg2
         conn = get_db_connection()
         cursor = conn.cursor()
         
