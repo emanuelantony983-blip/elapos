@@ -122,10 +122,10 @@ def register():
         cursor.close()
         conn.close()
         
-       return redirect(url_for('pending_payment'))
+        return redirect(url_for('pending_payment'))
         
     return render_template('register.html')
-
+           
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
